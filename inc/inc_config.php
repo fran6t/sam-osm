@@ -60,6 +60,32 @@ $config = [
         'max_zoom'    => 19,
     ],
 
+    // Vue au premier chargement de la carte (centre de la France, vue large).
+    'carte' => [
+        'centre' => [46.6, 2.4],
+        'zoom'   => 6,
+    ],
+
+    // Paramètres du moteur de calcul, transmis tels quels au Web Worker.
+    // Le §6 du cahier l'exige : aucune de ces valeurs ne doit être codée en
+    // dur dans le moteur, elles se règlent ici.
+    'calcul' => [
+        // Côté d'une cellule de l'index spatial, en mètres. Trop petit, la
+        // grille pèse en mémoire ; trop grand, elle ne filtre plus rien.
+        'taille_cellule' => 250,
+
+        'optimisation' => [
+            'passes'         => [100, 20, 5], // pas de balayage successifs, en mètres
+            'rayon_initial'  => 2000,         // rayon exploré par la passe grossière, en mètres
+            'nb_alternatives' => 3,           // maxima locaux proposés (§6 du cahier)
+            'separation_min' => 400,          // écart minimal entre deux alternatives, en mètres
+        ],
+    ],
+
+    // Jeu d'obstacles fictifs de la V0 : à graine égale, mêmes obstacles.
+    // Disparaîtra avec l'arrivée des vraies données OSM.
+    'graine_demo' => 42,
+
     // Garde-fous appliqués par le proxy à toute requête venant du navigateur
     // (§16 du cahier). Le client peut proposer n'importe quoi : c'est ici que
     // l'on décide ce qui est acceptable.

@@ -58,12 +58,21 @@ dépendances). Commenter le **pourquoi** : hypothèses géométriques, unités, 
 coordonnées, limites, compromis de perf, bizarreries OSM. Pas de commentaire qui répète le code.
 Préférer la solution qu'un développeur PHP/JS classique comprend en lisant le fichier.
 
+## Piège connu — le bord de la zone paraît toujours libre
+
+Aucun obstacle n'est connu hors de la zone dessinée, donc le score y grimpe artificiellement et
+l'optimiseur colle ses résultats contre la frontière. Vérifié en V0 : les trois maxima retournés
+étaient sur le bord. **À traiter en V1** : charger les obstacles sur une bbox élargie (marge ≥
+`rayonInitial`) tout en ne proposant des points qu'à l'intérieur de la zone. En attendant, ne pas
+présenter un résultat frontalier comme fiable.
+
 ## Commandes
 
 ```sh
 php -S localhost:8000        # serveur de dev (racine du dépôt)
 php -l <fichier>             # lint après toute édition PHP
+node src/tests.js            # 39 vérifications du moteur géométrique, sans dépendance
 ```
 
-Pas de suite de tests : les fonctions géométriques importantes portent leurs propres exemples
-vérifiables (§14). Commits en français, impératif, une étape logique par commit.
+`src/tests.js` compare notamment l'index spatial à un balayage exhaustif : toute optimisation de
+`spatial-index.js` doit le laisser vert. Commits en français, impératif, une étape logique par commit.

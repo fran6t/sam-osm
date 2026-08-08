@@ -1,26 +1,88 @@
 /* Styles maison de l'application, chargés après bootstrap.min.css.
-   Volontairement minimal : les styles propres à la carte (Leaflet, panneau
-   d'obstacles, résultat d'optimisation) seront ajoutés au fur et à mesure
-   du développement, à côté du code qu'ils habillent. */
+   Volontairement court : Bootstrap fait le gros du travail, on ne décrit ici
+   que la mise en page carte + panneau, et les quelques éléments qui n'ont pas
+   d'équivalent Bootstrap. */
 
-/* Bouton avec une icône bootstrap-icons collée au libellé. */
-.btn-icon {
-    display: inline-flex;
+/* Deux colonnes qui remplissent la fenêtre : le panneau défile, la carte non.
+   Sous 768 px, on repasse en pile verticale avec la carte au-dessus. */
+.sam-application {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.sam-panneau {
+    width: 340px;
+    flex: 0 0 340px;
+    padding: 1rem;
+    overflow-y: auto;
+    border-right: 1px solid #dee2e6;
+    background: #fff;
+}
+
+.sam-carte {
+    flex: 1 1 auto;
+    /* Leaflet a besoin d'une hauteur explicite : sans cela, le conteneur est
+       plat et la carte ne s'affiche pas. */
+    height: 100%;
+}
+
+@media (max-width: 767.98px) {
+    .sam-application {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+    }
+
+    .sam-panneau {
+        width: auto;
+        flex: none;
+        border-right: none;
+        border-top: 1px solid #dee2e6;
+        order: 2;
+    }
+
+    .sam-carte {
+        order: 1;
+        height: 60vh;
+    }
+}
+
+/* Étapes du déroulé (§18 du cahier) : numérotées, aérées. */
+.sam-etapes {
+    padding-left: 1.2rem;
+    margin-bottom: 0;
+}
+
+.sam-etapes > li {
+    margin-bottom: .85rem;
+}
+
+/* Pastille de couleur de la légende. */
+.sam-puce {
+    display: inline-block;
+    width: .75rem;
+    height: .75rem;
+    border-radius: 2px;
+    margin-right: .4rem;
+    vertical-align: middle;
+}
+
+/* Étiquette A/B/C posée sur un résultat (L.divIcon). */
+.sam-etiquette span {
+    display: flex;
     align-items: center;
-    gap: .35rem;
-    line-height: 1;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 700;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
 }
 
-.btn-icon i.bi {
-    line-height: 1;
-    vertical-align: -.05em;
-}
-
-/* Pied de page discret (attribution OSM + avertissement, §19 du cahier). */
-.app-footer {
-    text-align: center;
-    color: #6c757d;
-    padding: 1rem 0;
+.sam-avertissement {
     border-top: 1px solid #dee2e6;
-    margin-top: 2rem;
+    padding-top: .75rem;
 }

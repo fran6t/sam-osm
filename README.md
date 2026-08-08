@@ -17,9 +17,35 @@ obstacles, rien de plus.
 
 ## État du projet
 
-🚧 Démarrage. Le dépôt contient pour l'instant le cahier de conception et le
-socle technique. Voir [`doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md`](doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md)
-pour la conception détaillée et les étapes prévues (V0 → V1 → V1.1).
+🚧 **V0 — preuve de concept.** L'algorithme fonctionne de bout en bout, mais
+**sur des obstacles fictifs** générés dans la zone que vous dessinez : cette
+version ne parle pas encore à OpenStreetMap. Son but est de valider le calcul
+avant d'ajouter la complexité des vraies données.
+
+Vous pouvez déjà : dessiner une zone, générer des obstacles, cliquer un point
+approximatif, lancer l'optimisation, et obtenir jusqu'à trois emplacements avec
+leur cercle d'isolement et les obstacles qui les limitent.
+
+Prochaine étape (V1) : proxy PHP vers Overpass, normalisation des données OSM,
+cache SQLite, repères manuels. Voir
+[`doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md`](doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md).
+
+### Limite connue
+
+Aucun obstacle n'existe hors de la zone dessinée : le bord de la zone paraît
+donc toujours parfaitement libre, et les résultats ont tendance à s'y coller.
+Un résultat frontalier n'est pas fiable. Ce sera corrigé en V1 en chargeant les
+données sur une emprise plus large que la zone étudiée.
+
+### Tests
+
+```sh
+node src/tests.js
+```
+
+39 vérifications sans aucune dépendance : primitives géométriques, exactitude de
+l'index spatial comparée à un balayage exhaustif, et comportement de
+l'optimiseur sur des cas dont on connaît la réponse.
 
 ## Installation
 

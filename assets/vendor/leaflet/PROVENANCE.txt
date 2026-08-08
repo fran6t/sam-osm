@@ -1,0 +1,4 @@
+Leaflet 1.9.4 — https://leafletjs.com/ — licence BSD-2-Clause.
+Fichiers repris tels quels de la release officielle (leaflet.zip) :
+leaflet.js, leaflet.css, images/. Les sources non minifiees et les .map
+ont ete ecartes volontairement (poids inutile dans un depot).
