@@ -73,10 +73,10 @@ $configJs = [
         <ol class="sam-etapes">
             <li>
                 Délimiter une zone
-                <div class="d-flex gap-2 mt-1">
-                    <button type="button" class="btn btn-sm btn-primary" id="btnZone">Dessiner</button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnTerminerZone" disabled>Terminer</button>
+                <div class="mt-1">
+                    <button type="button" class="btn btn-sm btn-primary" id="btnZone">Placer le rectangle</button>
                 </div>
+                <div class="form-text">Étirez les poignées des coins pour l'ajuster.</div>
             </li>
             <li>
                 Charger les obstacles

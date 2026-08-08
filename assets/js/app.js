@@ -34,19 +34,23 @@
     // suffisent à décrire où l'on en est.
     // ------------------------------------------------------------------
     var etat = {
-        mode: null,        // 'zone' | 'point' | null : ce qu'un clic sur la carte déclenche
+        mode: null,        // 'point' quand l'application attend un clic sur la carte, sinon null
         zone: [],          // sommets de la zone, en [lat, lon]
         obstacles: [],     // format interne (§7 du cahier)
         depart: null,      // point approximatif choisi, en [lat, lon]
     };
 
+    // featureGroup et non layerGroup : seul le premier sait calculer le
+    // rectangle englobant de son contenu (getBounds), dont on a besoin pour
+    // cadrer la carte sur les résultats.
     var couches = {
         zone: null,
-        zoneEnCours: null,
-        obstacles: L.layerGroup(),
+        obstacles: L.featureGroup(),
         depart: null,
-        resultats: L.layerGroup(),
+        resultats: L.featureGroup(),
     };
+
+    var poignees = [];
 
     // ------------------------------------------------------------------
     // Carte
@@ -102,78 +106,142 @@
     }
 
     // ------------------------------------------------------------------
-    // Étape 1 — délimiter la zone
+    // Étape 1 — délimiter la zone (rectangle redimensionnable)
     // ------------------------------------------------------------------
-    // Pas de plugin de dessin en V0 : le besoin se résume à « poser des
-    // sommets et refermer », soit une trentaine de lignes. Un plugin
-    // (Geoman, Leaflet.draw) sera pesé au moment où l'édition de sommets
-    // deviendra utile — cf. §15 du cahier sur les dépendances.
+    // Un rectangle à poignées plutôt qu'un polygone à main levée : c'est le
+    // geste le plus court pour délimiter un secteur, et il suffit largement
+    // ici, la zone ne servant qu'à borner la recherche et, plus tard, les
+    // requêtes vers Overpass. Toujours pas de plugin de dessin (§15 du
+    // cahier) : un L.rectangle et quatre marqueurs déplaçables y pourvoient.
 
-    function demarrerDessinZone() {
-        etat.mode = 'zone';
-        etat.zone = [];
-        etat.depart = null;
+    function placerRectangle() {
+        effacerZone();
+        reinitialiserEtapesSuivantes();
+
+        // Rectangle centré sur la vue courante, occupant sa moitié : assez
+        // grand pour être saisi immédiatement, assez petit pour rester sous le
+        // plafond de surface dans la plupart des cas.
+        var vue = carte.getBounds();
+        var centre = vue.getCenter();
+        var dLat = (vue.getNorth() - vue.getSouth()) / 4;
+        var dLon = (vue.getEast() - vue.getWest()) / 4;
+
+        dessinerRectangle(L.latLngBounds(
+            [centre.lat - dLat, centre.lng - dLon],
+            [centre.lat + dLat, centre.lng + dLon]
+        ));
+
+        majZoneDepuisRectangle();
+    }
+
+    /** Les quatre coins, dans un ordre où l'opposé de i est toujours (i + 2) % 4. */
+    function coinsDe(limites) {
+        return [
+            limites.getSouthWest(),
+            limites.getNorthWest(),
+            limites.getNorthEast(),
+            limites.getSouthEast(),
+        ];
+    }
+
+    function dessinerRectangle(limites) {
+        couches.zone = L.rectangle(limites, {
+            color: '#0d6efd',
+            weight: 2,
+            fillOpacity: 0.05,
+        }).addTo(carte);
+
+        coinsDe(limites).forEach(function (coin, i) {
+            var poignee = L.marker(coin, {
+                draggable: true,
+                icon: L.divIcon({ className: 'sam-poignee', iconSize: [16, 16], iconAnchor: [8, 8] }),
+            }).addTo(carte);
+
+            // Le coin diagonalement opposé est figé au début du geste. Le
+            // relire à chaque déplacement serait faux : il bougerait avec le
+            // rectangle qu'on est en train de redéfinir.
+            var coinFixe = null;
+
+            poignee.on('dragstart', function () {
+                coinFixe = coinsDe(couches.zone.getBounds())[(i + 2) % 4];
+            });
+
+            poignee.on('drag', function () {
+                couches.zone.setBounds(L.latLngBounds(poignee.getLatLng(), coinFixe));
+                repositionnerPoignees(poignee);
+                afficherSurface();
+            });
+
+            poignee.on('dragend', function () {
+                // En tirant une poignée au-delà de l'opposée, les coins
+                // s'inversent : on les remet tous d'aplomb à la fin du geste.
+                repositionnerPoignees(null);
+                majZoneDepuisRectangle();
+            });
+
+            poignees.push(poignee);
+        });
+    }
+
+    function repositionnerPoignees(sauf) {
+        var coins = coinsDe(couches.zone.getBounds());
+        poignees.forEach(function (poignee, i) {
+            if (poignee !== sauf) {
+                poignee.setLatLng(coins[i]);
+            }
+        });
+    }
+
+    function effacerZone() {
         viderCouche('zone');
-        viderCouche('zoneEnCours');
-        viderCouche('depart');
+        poignees.forEach(function (poignee) { carte.removeLayer(poignee); });
+        poignees = [];
+        etat.zone = [];
+    }
+
+    /** Recopie le rectangle dans l'état, et rouvre l'étape suivante si la surface le permet. */
+    function majZoneDepuisRectangle() {
+        etat.zone = coinsDe(couches.zone.getBounds()).map(function (c) { return [c.lat, c.lng]; });
+
+        reinitialiserEtapesSuivantes();
+        activer('btnObstacles', afficherSurface() <= config.limites.surfaceMaxKm2);
+    }
+
+    /** Affiche la surface courante et retourne sa valeur en km². */
+    function afficherSurface() {
+        var coins = coinsDe(couches.zone.getBounds()).map(function (c) { return [c.lat, c.lng]; });
+        var surface = surfaceZoneKm2(coins);
+
+        if (surface > config.limites.surfaceMaxKm2) {
+            informer('Zone de ' + formaterNombre(surface, 1) + ' km², au-delà du maximum de '
+                + config.limites.surfaceMaxKm2 + ' km². Réduisez le rectangle.', true);
+        } else {
+            informer('Zone de ' + formaterNombre(surface, 1) + ' km². Ajustez-la avec les poignées, '
+                + 'puis chargez les obstacles.');
+        }
+
+        return surface;
+    }
+
+    /**
+     * Toute modification de la zone périme ce qui en découle : les obstacles
+     * ne correspondent plus, le point de départ et les résultats non plus.
+     * Mieux vaut les effacer que laisser à l'écran des données qui ne sont
+     * plus celles de la zone affichée.
+     */
+    function reinitialiserEtapesSuivantes() {
+        etat.obstacles = [];
+        etat.depart = null;
+        etat.mode = null;
+
         couches.obstacles.clearLayers();
         couches.resultats.clearLayers();
-        etat.obstacles = [];
+        viderCouche('depart');
+        document.getElementById('resultats').innerHTML = '';
+
         activer('btnObstacles', false);
         activer('btnPoint', false);
         activer('btnOptimiser', false);
-        document.getElementById('resultats').innerHTML = '';
-        informer('Cliquez les sommets de la zone à étudier. Double-cliquez, ou utilisez « Terminer », pour la refermer. '
-            + 'La carte est verrouillée pendant le dessin : utilisez la molette pour zoomer.');
-        majBoutonsZone();
-        appliquerMode();
-    }
-
-    function ajouterSommet(latlng) {
-        if (etat.zone.length >= config.limites.sommetsMax) {
-            informer('Nombre maximal de sommets atteint (' + config.limites.sommetsMax + ').', true);
-            return;
-        }
-        etat.zone.push([latlng.lat, latlng.lng]);
-        redessinerZoneEnCours();
-        majBoutonsZone();
-    }
-
-    function redessinerZoneEnCours() {
-        viderCouche('zoneEnCours');
-        couches.zoneEnCours = L.layerGroup(
-            [L.polyline(etat.zone, { color: '#0d6efd', dashArray: '5,5', weight: 2 })].concat(
-                etat.zone.map(function (p) {
-                    return L.circleMarker(p, { radius: 4, color: '#0d6efd', fillOpacity: 1 });
-                })
-            )
-        ).addTo(carte);
-    }
-
-    function terminerZone() {
-        if (etat.zone.length < 3) {
-            informer('Il faut au moins trois sommets pour délimiter une zone.', true);
-            return;
-        }
-
-        var surfaceKm2 = surfaceZoneKm2(etat.zone);
-        if (surfaceKm2 > config.limites.surfaceMaxKm2) {
-            informer(
-                'Zone trop vaste : ' + formaterNombre(surfaceKm2, 1) + ' km² pour un maximum de '
-                + config.limites.surfaceMaxKm2 + ' km². Redessinez une zone plus petite.',
-                true
-            );
-            return;
-        }
-
-        etat.mode = null;
-        viderCouche('zoneEnCours');
-        couches.zone = L.polygon(etat.zone, { color: '#0d6efd', weight: 2, fillOpacity: 0.05 }).addTo(carte);
-        carte.fitBounds(couches.zone.getBounds(), { padding: [20, 20] });
-
-        informer('Zone de ' + formaterNombre(surfaceKm2, 1) + ' km² délimitée. Chargez maintenant les obstacles.');
-        activer('btnObstacles', true);
-        majBoutonsZone();
         appliquerMode();
     }
 
@@ -397,17 +465,13 @@
         }
     }
 
-    function majBoutonsZone() {
-        activer('btnTerminerZone', etat.mode === 'zone' && etat.zone.length >= 3);
-    }
-
     /**
      * Applique le mode courant : curseur en croix, bouton enfoncé, et surtout
      * verrouillage du déplacement de la carte.
      *
      * POURQUOI VERROUILLER. Leaflet considère qu'un appui ayant bougé de plus
      * de 3 pixels est un glisser-déposer, et n'émet alors PAS d'événement
-     * 'click'. Souris un peu vivante ou pavé tactile : le sommet n'est jamais
+     * 'click'. Souris un peu vivante ou pavé tactile : le point n'est jamais
      * posé, et l'utilisateur voit seulement la carte se déplacer sous son
      * curseur. Tant qu'on attend un clic, le déplacement est donc désactivé —
      * le clic ne peut plus être avalé, et le geste devient sans ambiguïté.
@@ -417,7 +481,6 @@
         var enAttenteDeClic = etat.mode !== null;
 
         carte.getContainer().classList.toggle('sam-mode-clic', enAttenteDeClic);
-        document.getElementById('btnZone').classList.toggle('active', etat.mode === 'zone');
         document.getElementById('btnPoint').classList.toggle('active', etat.mode === 'point');
 
         if (enAttenteDeClic) {
@@ -431,21 +494,12 @@
     // Branchements
     // ------------------------------------------------------------------
     carte.on('click', function (e) {
-        if (etat.mode === 'zone') {
-            ajouterSommet(e.latlng);
-        } else if (etat.mode === 'point') {
+        if (etat.mode === 'point') {
             poserDepart(e.latlng);
         }
     });
 
-    carte.on('dblclick', function () {
-        if (etat.mode === 'zone') {
-            terminerZone();
-        }
-    });
-
-    document.getElementById('btnZone').addEventListener('click', demarrerDessinZone);
-    document.getElementById('btnTerminerZone').addEventListener('click', terminerZone);
+    document.getElementById('btnZone').addEventListener('click', placerRectangle);
     document.getElementById('btnObstacles').addEventListener('click', chargerObstacles);
     document.getElementById('btnOptimiser').addEventListener('click', optimiser);
 

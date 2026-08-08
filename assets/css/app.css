@@ -96,3 +96,18 @@
 .sam-mode-clic .leaflet-interactive {
     cursor: crosshair;
 }
+
+/* Poignées de redimensionnement de la zone (L.divIcon aux quatre coins).
+   Le curseur en diagonale et la taille généreuse comptent autant que
+   l'apparence : ce sont eux qui signalent que le coin est saisissable. */
+.sam-poignee {
+    background: #fff;
+    border: 2px solid #0d6efd;
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    cursor: nwse-resize;
+}
+
+.sam-poignee:hover {
+    background: #0d6efd;
+}
