@@ -454,14 +454,38 @@
             r.obstacles.forEach(function (o, rang) {
                 var limitant = rang === 0; // celui qui fixe le score
 
+                // Doublure blanche sous le trait : sans elle, un trait vert sur
+                // un fond de carte vert ou gris devient illisible — c'est
+                // précisément le cas des chemins en zone boisée.
+                couches.mesures.addLayer(
+                    L.polyline([r.latlon, o.contact], {
+                        color: '#fff',
+                        weight: limitant ? 6 : 4,
+                        opacity: 0.7,
+                    })
+                );
+
                 couches.mesures.addLayer(
                     L.polyline([r.latlon, o.contact], {
                         color: '#198754',
-                        weight: limitant ? 3 : 1,
-                        opacity: limitant ? 0.95 : 0.55,
-                        dashArray: limitant ? null : '4,4',
+                        weight: limitant ? 3 : 2,
+                        opacity: limitant ? 1 : 0.85,
+                        dashArray: limitant ? null : '6,4',
                     }).bindTooltip(o.libelle + ' — ' + formaterDistance(o.distance))
                 );
+
+                if (limitant) {
+                    couches.mesures.addLayer(
+                        L.marker(milieu(r.latlon, o.contact), {
+                            icon: L.divIcon({
+                                className: 'sam-cote',
+                                html: '<span>' + formaterDistance(o.distance) + '</span>',
+                                iconSize: [0, 0],
+                            }),
+                            interactive: false,
+                        })
+                    );
+                }
 
                 // Petite marque au point de contact : elle montre précisément
                 // où la mesure aboutit sur l'obstacle.
@@ -475,6 +499,11 @@
                 );
             });
         });
+    }
+
+    /** Milieu de deux positions [lat, lon] : où poser la cote d'une mesure. */
+    function milieu(a, b) {
+        return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     }
 
     function carteResultat(r, rang) {

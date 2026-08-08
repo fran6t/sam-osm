@@ -141,3 +141,18 @@
 .sam-poignee:hover {
     background: #0d6efd;
 }
+
+/* Cote portée sur le trait de mesure limitant : le chiffre que l'on vient
+   vérifier doit être lisible sans survoler quoi que ce soit. */
+.sam-cote span {
+    display: inline-block;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, .92);
+    border: 1px solid #198754;
+    border-radius: .25rem;
+    padding: 0 .25rem;
+    font-size: .75rem;
+    font-weight: 600;
+    color: #146c43;
+    white-space: nowrap;
+}
