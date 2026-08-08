@@ -153,15 +153,14 @@ function pointDansPolygone(px, py, anneau) {
 }
 
 /**
- * Distance d'un point à un polygone plein (un bâtiment, par exemple).
- * Zéro si le point est à l'intérieur : on est alors DANS l'obstacle, pas à
- * une distance de son bord. Sinon, distance au bord le plus proche.
+ * Distance d'un point au CONTOUR d'un polygone, qu'il soit dedans ou dehors.
+ * Le contour est la polyligne fermée : on relie le dernier sommet au premier.
+ *
+ * Utile dans les deux sens : mesurer la distance au mur d'un bâtiment depuis
+ * l'extérieur, ou mesurer depuis l'intérieur d'une zone à quelle distance on
+ * se trouve de sa limite.
  */
-function distancePointPolygone(px, py, anneau) {
-    if (pointDansPolygone(px, py, anneau)) {
-        return 0;
-    }
-    // Le bord est la polyligne fermée : on ajoute le retour au premier sommet.
+function distancePointContour(px, py, anneau) {
     var min = Infinity;
     for (var i = 0, j = anneau.length - 1; i < anneau.length; j = i++) {
         var d = distancePointSegment(px, py, anneau[j][0], anneau[j][1], anneau[i][0], anneau[i][1]);
@@ -170,6 +169,18 @@ function distancePointPolygone(px, py, anneau) {
         }
     }
     return min;
+}
+
+/**
+ * Distance d'un point à un polygone plein (un bâtiment, par exemple).
+ * Zéro si le point est à l'intérieur : on est alors DANS l'obstacle, pas à
+ * une distance de son bord. Sinon, distance au contour.
+ */
+function distancePointPolygone(px, py, anneau) {
+    if (pointDansPolygone(px, py, anneau)) {
+        return 0;
+    }
+    return distancePointContour(px, py, anneau);
 }
 
 /**

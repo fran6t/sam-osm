@@ -423,7 +423,13 @@
 
     function carteResultat(r, rang) {
         var obstacles = r.obstacles.map(function (o, i) {
-            return '<li' + (i === 0 ? ' class="fw-semibold"' : '') + '>'
+            var classes = [];
+            if (i === 0) { classes.push('fw-semibold'); }
+            // Le bord de la zone n'est pas un obstacle réel mais l'aveu d'une
+            // ignorance : il se lit différemment du reste de la liste.
+            if (o.categorie === 'limite') { classes.push('text-warning-emphasis', 'fst-italic'); }
+
+            return '<li' + (classes.length ? ' class="' + classes.join(' ') + '"' : '') + '>'
                 + echapper(o.libelle) + ' — ' + formaterDistance(o.distance) + '</li>';
         }).join('');
 
@@ -435,7 +441,7 @@
             + '      <span class="fs-5">' + formaterDistance(r.score) + '</span>'
             + '    </div>'
             + '    <div class="small text-muted">' + r.latlon[0].toFixed(5) + ', ' + r.latlon[1].toFixed(5) + '</div>'
-            + '    <div class="small mt-1">Obstacles les plus proches :</div>'
+            + '    <div class="small mt-1">Éléments limitants :</div>'
             + '    <ul class="small mb-0 ps-3">' + obstacles + '</ul>'
             + '  </div>'
             + '</div>';

@@ -22,7 +22,7 @@ for (const fichier of ['geometry.js', 'spatial-index.js', 'optimizer.js']) {
 }
 const {
     creerProjection, distancePointPoint, distancePointSegment, distancePointPolyligne,
-    pointDansPolygone, distancePointPolygone, distanceAObstacle, projeterObstacle,
+    pointDansPolygone, distancePointPolygone, distancePointContour, distanceAObstacle, projeterObstacle,
     IndexSpatial, optimiserIsolement,
 } = contexte;
 
@@ -180,6 +180,43 @@ console.log('\n— Optimiseur —');
         passes: [100, 20], rayonInitial: 200, estDansZone: () => false,
     });
     verifierVrai('départ hors zone : liste vide plutôt qu\'une erreur', vide.length === 0);
+}
+
+console.log('\n— Plafond lié à la limite de connaissance —');
+{
+    // Un seul obstacle, loin dans un coin, et une zone carrée de 2 km de côté.
+    // Sans plafond, le meilleur point serait collé au bord opposé, avec un
+    // score énorme tiré du vide que l'on n'a jamais examiné.
+    const obstacle = {
+        id: 'o', categorie: 'test', libelle: 'poteau', type: 'point',
+        pts: [[100, 100]], bbox: [100, 100, 100, 100],
+    };
+    const index = new IndexSpatial([obstacle], 250);
+    const zone = [[0, 0], [2000, 0], [2000, 2000], [0, 2000]];
+    const dansZone = (x, y) => pointDansPolygone(x, y, zone);
+
+    const sansPlafond = optimiserIsolement(index, { x: 1000, y: 1000 }, {
+        passes: [100, 20], rayonInitial: 1500, nbAlternatives: 1, estDansZone: dansZone,
+    });
+    const avecPlafond = optimiserIsolement(index, { x: 1000, y: 1000 }, {
+        passes: [100, 20], rayonInitial: 1500, nbAlternatives: 1,
+        estDansZone: dansZone, bordConnaissance: zone,
+    });
+
+    const distanceAuBord = (r) => distancePointContour(r.x, r.y, zone);
+
+    verifierVrai('sans plafond, le résultat se colle au bord', distanceAuBord(sansPlafond[0]) < 50);
+    verifierVrai('avec plafond, il s\'en éloigne nettement', distanceAuBord(avecPlafond[0]) > 400);
+    verifier('le score ne dépasse jamais la distance au bord',
+        Math.min(avecPlafond[0].score, distanceAuBord(avecPlafond[0])), avecPlafond[0].score, 1e-6);
+    verifierVrai('le cercle d\'isolement reste donc dans la zone',
+        avecPlafond[0].score <= distanceAuBord(avecPlafond[0]) + 1e-6);
+    verifierVrai('le bord est nommé parmi les éléments limitants',
+        avecPlafond[0].obstacles.some((o) => o.categorie === 'limite'));
+
+    // Le contour se mesure aussi bien de l'intérieur que de l'extérieur.
+    verifier('distance au contour depuis l\'intérieur', distancePointContour(1000, 1500, zone), 500);
+    verifier('distance au contour depuis l\'extérieur', distancePointContour(1000, 2300, zone), 300);
 }
 
 console.log('\n— Alternatives (§6 du cahier) —');

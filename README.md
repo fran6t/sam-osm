@@ -30,12 +30,17 @@ Prochaine étape (V1) : proxy PHP vers Overpass, normalisation des données OSM,
 cache SQLite, repères manuels. Voir
 [`doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md`](doc/CAHIER_CONCEPTION_ISOLEMENT_OSM.md).
 
-### Limite connue
+### Ce que mesure vraiment le score
 
-Aucun obstacle n'existe hors de la zone dessinée : le bord de la zone paraît
-donc toujours parfaitement libre, et les résultats ont tendance à s'y coller.
-Un résultat frontalier n'est pas fiable. Ce sera corrigé en V1 en chargeant les
-données sur une emprise plus large que la zone étudiée.
+SAM ne connaît aucun obstacle hors de la zone étudiée. Un emplacement collé au
+bord semblerait donc merveilleusement isolé, alors qu'une autoroute peut passer
+dix mètres plus loin, juste en dehors.
+
+Le score est pour cette raison **plafonné par la distance au bord de la zone** :
+on ne certifie un isolement que jusqu'à la limite de ce qui a été examiné. Le
+cercle affiché ne déborde donc jamais de la zone, et quand c'est le bord qui
+limite le résultat, il est nommé explicitement parmi les éléments limitants —
+cela signifie « agrandissez la zone », et non « c'est isolé ».
 
 ### Tests
 

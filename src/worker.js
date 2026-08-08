@@ -74,7 +74,12 @@ self.onmessage = function (evenement) {
             var debutCalcul = Date.now();
             var depart = projection.versMetres(message.point[0], message.point[1]);
 
-            var options = Object.assign({}, message.options || {}, { estDansZone: estDansZone });
+            // Le bord de la zone est aussi la limite de ce que l'on connaît :
+            // le score ne peut pas le dépasser (voir calculerScore()).
+            var options = Object.assign({}, message.options || {}, {
+                estDansZone: estDansZone,
+                bordConnaissance: zoneProjetee,
+            });
             var resultats = optimiserIsolement(index, { x: depart[0], y: depart[1] }, options);
 
             self.postMessage({

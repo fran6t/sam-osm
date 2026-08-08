@@ -58,13 +58,18 @@ dépendances). Commenter le **pourquoi** : hypothèses géométriques, unités, 
 coordonnées, limites, compromis de perf, bizarreries OSM. Pas de commentaire qui répète le code.
 Préférer la solution qu'un développeur PHP/JS classique comprend en lisant le fichier.
 
-## Piège connu — le bord de la zone paraît toujours libre
+## Le score est plafonné par la limite de connaissance
 
-Aucun obstacle n'est connu hors de la zone dessinée, donc le score y grimpe artificiellement et
-l'optimiseur colle ses résultats contre la frontière. Vérifié en V0 : les trois maxima retournés
-étaient sur le bord. **À traiter en V1** : charger les obstacles sur une bbox élargie (marge ≥
-`rayonInitial`) tout en ne proposant des points qu'à l'intérieur de la zone. En attendant, ne pas
-présenter un résultat frontalier comme fiable.
+Hors de la zone chargée, aucun obstacle n'est connu : sans précaution le score y grimpe
+artificiellement et l'optimiseur colle ses résultats contre la frontière (constaté en V0, les trois
+maxima étaient sur le bord). `calculerScore()` dans `src/optimizer.js` borne donc le score par la
+distance au contour passé en `options.bordConnaissance` — on ne certifie un isolement que jusqu'à
+la limite de ce qu'on a examiné, et le cercle ne déborde jamais de la zone. Le bord apparaît alors
+parmi les éléments limitants, ce qui se lit « élargissez la zone », pas « c'est isolé ».
+
+**En V1**, `bordConnaissance` doit devenir l'emprise élargie sur laquelle les données OSM ont été
+chargées (marge ≥ `rayonInitial`), et non la zone dessinée — sinon on plafonne plus tôt que
+nécessaire. `estDansZone` reste, lui, la zone dessinée.
 
 ## Commandes
 

@@ -47,14 +47,47 @@ var OPTIONS_PAR_DEFAUT = {
     separationMin: 400,     // distance minimale entre deux alternatives, en mètres
     nbObstaclesDetailles: 3, // obstacles listés dans le résultat
     estDansZone: null,      // function(x, y) → bool, ou null si pas de contrainte
+    bordConnaissance: null, // contour projeté au-delà duquel on ne sait rien
 };
+
+/**
+ * Score d'isolement d'une position : la distance à l'obstacle le plus proche,
+ * PLAFONNÉE par la distance au bord de ce qu'on a réellement examiné.
+ *
+ * ------------------------------------------------------------------
+ * POURQUOI CE PLAFOND
+ * ------------------------------------------------------------------
+ * Les obstacles ne sont connus qu'à l'intérieur de la zone étudiée. Sans
+ * précaution, un point collé au bord obtient donc un score magnifique — non
+ * parce qu'il est isolé, mais parce qu'on n'a pas regardé de l'autre côté. Le
+ * calcul se réfugie alors systématiquement dans les coins, et propose des
+ * emplacements qui peuvent longer une autoroute située dix mètres plus loin,
+ * hors zone.
+ *
+ * On ne peut honnêtement certifier un isolement que jusqu'à la limite de ce
+ * qu'on a examiné : le score est donc borné par la distance à cette limite.
+ * Un cercle d'isolement ne déborde ainsi jamais de la zone, et sa taille
+ * signifie ce qu'elle prétend signifier.
+ *
+ * En V1, la limite de connaissance ne sera plus la zone dessinée mais
+ * l'emprise, plus large, sur laquelle les données OSM auront été chargées.
+ */
+function calculerScore(index, x, y, bordConnaissance) {
+    var score = index.distanceMinimale(x, y);
+
+    if (bordConnaissance) {
+        score = Math.min(score, distancePointContour(x, y, bordConnaissance));
+    }
+
+    return score;
+}
 
 /**
  * Balaye une grille carrée centrée sur (cx, cy) et retourne les positions
  * évaluées, chacune avec son score. Le centre est toujours évalué, même si le
  * pas ne retombe pas dessus.
  */
-function balayer(index, cx, cy, rayon, pas, estDansZone) {
+function balayer(index, cx, cy, rayon, pas, estDansZone, bordConnaissance) {
     var candidats = [];
     var nbPas = Math.floor(rayon / pas);
 
@@ -69,7 +102,7 @@ function balayer(index, cx, cy, rayon, pas, estDansZone) {
                 continue;
             }
 
-            candidats.push({ x: x, y: y, score: index.distanceMinimale(x, y) });
+            candidats.push({ x: x, y: y, score: calculerScore(index, x, y, bordConnaissance) });
         }
     }
     return candidats;
@@ -88,7 +121,7 @@ function affiner(index, depart, options) {
         var pas = options.passes[p];
         var rayon = 2 * options.passes[p - 1];
 
-        var candidats = balayer(index, meilleur.x, meilleur.y, rayon, pas, options.estDansZone);
+        var candidats = balayer(index, meilleur.x, meilleur.y, rayon, pas, options.estDansZone, options.bordConnaissance);
         for (var i = 0; i < candidats.length; i++) {
             if (candidats[i].score > meilleur.score) {
                 meilleur = candidats[i];
@@ -147,7 +180,8 @@ function optimiserIsolement(index, depart, optionsAppelant) {
         depart.y,
         options.rayonInitial,
         options.passes[0],
-        options.estDansZone
+        options.estDansZone,
+        options.bordConnaissance
     );
 
     // Le point cliqué lui-même est toujours un candidat valable : il peut être
@@ -156,7 +190,7 @@ function optimiserIsolement(index, depart, optionsAppelant) {
         candidats.push({
             x: depart.x,
             y: depart.y,
-            score: index.distanceMinimale(depart.x, depart.y),
+            score: calculerScore(index, depart.x, depart.y, options.bordConnaissance),
         });
     }
 
@@ -168,19 +202,34 @@ function optimiserIsolement(index, depart, optionsAppelant) {
 
     var resultats = graines.map(function (graine) {
         var affine = affiner(index, graine, options);
-        var proches = index.plusProches(affine.x, affine.y, options.nbObstaclesDetailles);
 
-        return {
-            x: affine.x,
-            y: affine.y,
-            score: affine.score,
-            obstacles: proches.map(function (p) {
+        var limitants = index.plusProches(affine.x, affine.y, options.nbObstaclesDetailles)
+            .map(function (p) {
                 return {
                     libelle: p.obstacle.libelle,
                     categorie: p.obstacle.categorie,
                     distance: p.distance,
                 };
-            }),
+            });
+
+        // Le bord de la zone est présenté comme un élément limitant à part
+        // entière : quand c'est lui qui borne le score, l'utilisateur doit le
+        // savoir. Cela signifie « élargissez la zone », pas « c'est isolé ».
+        if (options.bordConnaissance) {
+            limitants.push({
+                libelle: 'Bord de la zone étudiée (au-delà, aucune donnée)',
+                categorie: 'limite',
+                distance: distancePointContour(affine.x, affine.y, options.bordConnaissance),
+            });
+            limitants.sort(function (a, b) { return a.distance - b.distance; });
+            limitants.length = Math.min(limitants.length, options.nbObstaclesDetailles);
+        }
+
+        return {
+            x: affine.x,
+            y: affine.y,
+            score: affine.score,
+            obstacles: limitants,
         };
     });
 
