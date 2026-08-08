@@ -1,0 +1,12 @@
+# Cache SQLite du proxy Overpass : jamais d'accès direct depuis le web.
+# Le contenu n'est pas secret (ce sont des réponses OSM publiques), mais un
+# fichier .sqlite téléchargeable n'a aucune raison d'être exposé, et ce
+# dossier ne doit en aucun cas exécuter de script.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>

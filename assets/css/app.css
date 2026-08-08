@@ -1,0 +1,26 @@
+/* Styles maison de l'application, chargés après bootstrap.min.css.
+   Volontairement minimal : les styles propres à la carte (Leaflet, panneau
+   d'obstacles, résultat d'optimisation) seront ajoutés au fur et à mesure
+   du développement, à côté du code qu'ils habillent. */
+
+/* Bouton avec une icône bootstrap-icons collée au libellé. */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    line-height: 1;
+}
+
+.btn-icon i.bi {
+    line-height: 1;
+    vertical-align: -.05em;
+}
+
+/* Pied de page discret (attribution OSM + avertissement, §19 du cahier). */
+.app-footer {
+    text-align: center;
+    color: #6c757d;
+    padding: 1rem 0;
+    border-top: 1px solid #dee2e6;
+    margin-top: 2rem;
+}

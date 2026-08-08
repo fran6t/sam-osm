@@ -1,0 +1,21 @@
+# Configuration locale (non versionnée)
+inc/inc_config_perso.php
+
+# Cache SQLite du proxy Overpass (auto-créé au premier accès)
+bddsam/*.sqlite
+bddsam/*.sqlite-journal
+bddsam/*.sqlite-wal
+bddsam/*.sqlite-shm
+
+# Fichier de travail
+doc/tmp.md
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Réglages Claude Code propres à la machine
+.claude/settings.local.json
