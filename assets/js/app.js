@@ -123,7 +123,8 @@
         activer('btnPoint', false);
         activer('btnOptimiser', false);
         document.getElementById('resultats').innerHTML = '';
-        informer('Cliquez les sommets de la zone à étudier. Double-cliquez, ou utilisez « Terminer », pour la refermer.');
+        informer('Cliquez les sommets de la zone à étudier. Double-cliquez, ou utilisez « Terminer », pour la refermer. '
+            + 'La carte est verrouillée pendant le dessin : utilisez la molette pour zoomer.');
         majBoutonsZone();
         appliquerMode();
     }
@@ -401,15 +402,29 @@
     }
 
     /**
-     * Rend le mode courant visible : curseur en croix sur la carte et bouton
-     * enfoncé. Sans ce retour, « mode dessin actif » et « rien ne s'est passé »
-     * se ressemblent trait pour trait, puisque la carte continue de se déplacer
-     * exactement comme avant.
+     * Applique le mode courant : curseur en croix, bouton enfoncé, et surtout
+     * verrouillage du déplacement de la carte.
+     *
+     * POURQUOI VERROUILLER. Leaflet considère qu'un appui ayant bougé de plus
+     * de 3 pixels est un glisser-déposer, et n'émet alors PAS d'événement
+     * 'click'. Souris un peu vivante ou pavé tactile : le sommet n'est jamais
+     * posé, et l'utilisateur voit seulement la carte se déplacer sous son
+     * curseur. Tant qu'on attend un clic, le déplacement est donc désactivé —
+     * le clic ne peut plus être avalé, et le geste devient sans ambiguïté.
+     * Le zoom (molette, boutons +/−) reste disponible pour se déplacer.
      */
     function appliquerMode() {
-        carte.getContainer().classList.toggle('sam-mode-clic', etat.mode !== null);
+        var enAttenteDeClic = etat.mode !== null;
+
+        carte.getContainer().classList.toggle('sam-mode-clic', enAttenteDeClic);
         document.getElementById('btnZone').classList.toggle('active', etat.mode === 'zone');
         document.getElementById('btnPoint').classList.toggle('active', etat.mode === 'point');
+
+        if (enAttenteDeClic) {
+            carte.dragging.disable();
+        } else {
+            carte.dragging.enable();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -436,8 +451,16 @@
 
     document.getElementById('btnPoint').addEventListener('click', function () {
         etat.mode = 'point';
-        informer('Cliquez sur la carte l\'endroit qui vous paraît intéressant.');
+        informer('Cliquez sur la carte l\'endroit qui vous paraît intéressant. '
+            + 'La carte est verrouillée jusqu\'à ce que le point soit posé.');
         appliquerMode();
+    });
+
+    // Le conteneur de la carte est dimensionné par flexbox : on redemande à
+    // Leaflet de mesurer sa taille une fois la mise en page stabilisée, sinon
+    // les tuiles et les clics peuvent être décalés au premier affichage.
+    window.addEventListener('load', function () {
+        carte.invalidateSize();
     });
 
     informer('Commencez par délimiter la zone à étudier.');
