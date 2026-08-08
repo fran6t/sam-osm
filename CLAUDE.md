@@ -7,17 +7,9 @@ photo). Dépôt destiné à être **public** (GitHub), licence MIT.
 autorité (workflow, algorithme, format interne, licences, étapes V0→V1.1). Ne pas le paraphraser
 ici. Ce fichier ne contient que ce qui ne s'en déduit pas.
 
-État : socle nu. `index.php`, `api/`, `src/` restent à écrire (V0 : Leaflet + polygone + clic +
-obstacles fictifs + optimisation locale, **avant** toute complexité OSM).
-
-## Arborescence
-
-```
-index.php   page carte          api/     proxy PHP → Overpass + cache
-inc/        config + helpers    src/     moteur JS (géométrie, index spatial, normalisation)
-assets/     css js fonts vendor/ (Leaflet & co, vendorés)
-bddsam/     cache.sqlite (non versionné, .htaccess Require all denied)
-```
+État : **V0 faite** (Leaflet + polygone + clic + obstacles fictifs + optimisation locale). Les
+obstacles viennent encore de `src/obstacles-demo.js` : le moteur n'a jamais vu de données OSM.
+Prochaine étape V1 = brancher Overpass derrière `api/` et écrire la couche de normalisation.
 
 `inc/inc_lib.php` (~95 lignes) expose **tout** le PHP partagé : `config()`, `e()`, `asset()`,
 `checkRequirements()`, `checkPermissions()`. Ne pas le grepper pour autre chose, il n'y a rien
