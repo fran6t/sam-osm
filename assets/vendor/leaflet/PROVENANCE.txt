@@ -2,3 +2,8 @@ Leaflet 1.9.4 — https://leafletjs.com/ — licence BSD-2-Clause.
 Fichiers repris tels quels de la release officielle (leaflet.zip) :
 leaflet.js, leaflet.css, images/. Les sources non minifiees et les .map
 ont ete ecartes volontairement (poids inutile dans un depot).
+
+Seule modification apportee au fichier officiel : la derniere ligne
+"//# sourceMappingURL=leaflet.js.map" a ete retiree de leaflet.js, puisque
+le fichier .map n'est pas vendore. Sans cela, la console du navigateur
+signale un 404 a chaque chargement. Le code lui-meme est intact.
