@@ -53,17 +53,35 @@
     var poignees = [];
 
     // ------------------------------------------------------------------
-    // Carte
+    // Carte — créée seulement quand on sait OÙ regarder
     // ------------------------------------------------------------------
-    var carte = L.map('carte', { doubleClickZoom: false }).setView(config.vueInitiale, config.zoomInitial);
+    // Leaflet ne télécharge aucune tuile tant que la carte n'a pas de vue.
+    // On diffère donc sa création jusqu'à ce que l'utilisateur ait donné un
+    // code postal (ou choisi d'explorer). Sur une connexion lente, cela évite
+    // de charger les tuiles d'un pays entier pour finir par les jeter.
+    var carte = null;
 
-    L.tileLayer(config.tuiles.url, {
-        maxZoom: config.tuiles.maxZoom,
-        attribution: config.tuiles.attribution,
-    }).addTo(carte);
+    function demarrerCarte(centre, zoom) {
+        carte = L.map('carte', { doubleClickZoom: false }).setView(centre, zoom);
 
-    couches.obstacles.addTo(carte);
-    couches.resultats.addTo(carte);
+        L.tileLayer(config.tuiles.url, {
+            maxZoom: config.tuiles.maxZoom,
+            attribution: config.tuiles.attribution,
+        }).addTo(carte);
+
+        couches.obstacles.addTo(carte);
+        couches.resultats.addTo(carte);
+
+        carte.on('click', function (e) {
+            if (etat.mode === 'point') {
+                poserDepart(e.latlng);
+            }
+        });
+
+        document.getElementById('accueil').style.display = 'none';
+        activer('btnZone', true);
+        informer('Placez le rectangle de zone, puis ajustez-le avec ses poignées.');
+    }
 
     // ------------------------------------------------------------------
     // Web Worker
@@ -493,12 +511,6 @@
     // ------------------------------------------------------------------
     // Branchements
     // ------------------------------------------------------------------
-    carte.on('click', function (e) {
-        if (etat.mode === 'point') {
-            poserDepart(e.latlng);
-        }
-    });
-
     document.getElementById('btnZone').addEventListener('click', placerRectangle);
     document.getElementById('btnObstacles').addEventListener('click', chargerObstacles);
     document.getElementById('btnOptimiser').addEventListener('click', optimiser);
@@ -510,12 +522,47 @@
         appliquerMode();
     });
 
-    // Le conteneur de la carte est dimensionné par flexbox : on redemande à
-    // Leaflet de mesurer sa taille une fois la mise en page stabilisée, sinon
-    // les tuiles et les clics peuvent être décalés au premier affichage.
-    window.addEventListener('load', function () {
-        carte.invalidateSize();
+    // ------------------------------------------------------------------
+    // Écran d'accueil : trouver le point de départ avant d'afficher la carte
+    // ------------------------------------------------------------------
+    function messageAccueil(texte, estErreur) {
+        var zone = document.getElementById('accueilMessage');
+        zone.textContent = texte;
+        zone.className = 'small mt-2 ' + (estErreur ? 'text-danger' : 'text-muted');
+    }
+
+    document.getElementById('formAccueil').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var codePostal = document.getElementById('cp').value.trim();
+        var bouton = document.getElementById('btnAccueil');
+
+        bouton.disabled = true;
+        messageAccueil('Recherche du code postal...');
+
+        // Le géocodage passe par notre proxy : le navigateur ne connaît aucune
+        // URL de fournisseur, et le cache serveur évite de solliciter Nominatim
+        // pour un code postal déjà résolu.
+        fetch(config.cheminGeocodage + '?cp=' + encodeURIComponent(codePostal))
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, donnees: d }; }); })
+            .then(function (reponse) {
+                if (!reponse.ok) {
+                    throw new Error(reponse.donnees.erreur || 'recherche impossible');
+                }
+                demarrerCarte([reponse.donnees.lat, reponse.donnees.lon], config.zoomTravail);
+            })
+            .catch(function (erreur) {
+                messageAccueil(erreur.message, true);
+                bouton.disabled = false;
+            });
     });
 
-    informer('Commencez par délimiter la zone à étudier.');
+    // Porte de sortie : hors de France, ou simplement pour se promener. On
+    // retombe alors sur la vue large, en assumant le chargement de tuiles.
+    document.getElementById('btnExplorer').addEventListener('click', function () {
+        demarrerCarte(config.vueInitiale, config.zoomInitial);
+    });
+
+    document.getElementById('cp').focus();
+    informer('Indiquez un code postal pour ouvrir la carte au bon endroit.');
 })();

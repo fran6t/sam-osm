@@ -19,6 +19,7 @@ $config = config();
 $configJs = [
     'vueInitiale'  => $config['carte']['centre'],
     'zoomInitial'  => $config['carte']['zoom'],
+    'zoomTravail'  => $config['carte']['zoom_travail'],
     'tuiles'       => [
         'url'         => $config['tiles']['url'],
         'maxZoom'     => $config['tiles']['max_zoom'],
@@ -39,6 +40,7 @@ $configJs = [
     ],
     'graineDemo'   => $config['graine_demo'],
     'cheminWorker' => rtrim($config['base_url'], '/') . '/src/worker.js',
+    'cheminGeocodage' => rtrim($config['base_url'], '/') . '/api/geocode.php',
 ];
 ?>
 <!DOCTYPE html>
@@ -74,7 +76,7 @@ $configJs = [
             <li>
                 Délimiter une zone
                 <div class="mt-1">
-                    <button type="button" class="btn btn-sm btn-primary" id="btnZone">Placer le rectangle</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="btnZone" disabled>Placer le rectangle</button>
                 </div>
                 <div class="form-text">Étirez les poignées des coins pour l'ajuster.</div>
             </li>
@@ -126,7 +128,38 @@ $configJs = [
         </footer>
     </aside>
 
-    <main id="carte" class="sam-carte"></main>
+    <div class="sam-carte">
+        <div id="carte" class="sam-carte-toile"></div>
+
+        <!--
+            Écran d'accueil : tant qu'il est affiché, la carte n'a pas de vue,
+            donc AUCUNE tuile n'est téléchargée. C'est le point important sur
+            une connexion lente : on ne charge pas un pays entier en attendant
+            que l'utilisateur navigue jusqu'à son secteur.
+        -->
+        <div id="accueil" class="sam-accueil">
+            <form id="formAccueil" class="sam-accueil-boite">
+                <h2 class="h5">Où cherchez-vous ?</h2>
+                <p class="text-muted small">
+                    Indiquez un code postal : la carte s'ouvrira directement à cet endroit,
+                    à une échelle de travail.
+                </p>
+
+                <div class="input-group">
+                    <input type="text" class="form-control" id="cp" name="cp"
+                           inputmode="numeric" pattern="[0-9]{5}" maxlength="5"
+                           placeholder="38250" autocomplete="postal-code" required>
+                    <button type="submit" class="btn btn-primary" id="btnAccueil">Ouvrir</button>
+                </div>
+
+                <div id="accueilMessage" class="small mt-2"></div>
+
+                <button type="button" class="btn btn-link btn-sm px-0 mt-2" id="btnExplorer">
+                    Explorer sans code postal
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>window.SAM = <?= json_encode($configJs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;</script>

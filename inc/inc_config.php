@@ -60,10 +60,31 @@ $config = [
         'max_zoom'    => 19,
     ],
 
-    // Vue au premier chargement de la carte (centre de la France, vue large).
+    // Vue de la carte.
+    // 'centre'/'zoom' ne servent que de repli, quand l'utilisateur choisit
+    // d'explorer sans donner de code postal. Le cas normal est d'ouvrir
+    // directement sur 'zoom_travail' : une échelle où l'on distingue routes et
+    // bâtiments, donc où le rectangle de zone se pose utilement. Tant que la
+    // position n'est pas connue, AUCUNE tuile n'est demandée — c'est ce qui
+    // évite de télécharger un pays entier sur une connexion lente.
     'carte' => [
-        'centre' => [46.6, 2.4],
-        'zoom'   => 6,
+        'centre'       => [46.6, 2.4],
+        'zoom'         => 6,
+        'zoom_travail' => 13,
+    ],
+
+    // Géocodage d'un code postal, via le proxy api/geocode.php.
+    // Nominatim est un service public gratuit soumis à des règles d'usage
+    // strictes : au plus une requête par seconde, et un User-Agent identifiant
+    // l'application. Le cache et l'intervalle ci-dessous les font respecter.
+    'geocodage' => [
+        'endpoint'           => 'https://nominatim.openstreetmap.org/search',
+        'pays'               => 'fr',
+        'motif'              => '/^\d{5}$/', // code postal français
+        'timeout'            => 10,          // secondes
+        'intervalle_min'     => 1.0,         // secondes entre deux appels sortants
+        'cache_ttl'          => 180 * 86400, // un code postal ne se déplace pas
+        'reponse_max_octets' => 256 * 1024,
     ],
 
     // Paramètres du moteur de calcul, transmis tels quels au Web Worker.

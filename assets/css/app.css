@@ -22,9 +22,39 @@
 
 .sam-carte {
     flex: 1 1 auto;
-    /* Leaflet a besoin d'une hauteur explicite : sans cela, le conteneur est
-       plat et la carte ne s'affiche pas. */
+    /* Repère de positionnement pour l'écran d'accueil, qui se superpose à la
+       carte tant que le lieu n'est pas choisi. */
+    position: relative;
     height: 100%;
+}
+
+/* Leaflet a besoin d'une hauteur explicite : sans cela, le conteneur est plat
+   et la carte ne s'affiche pas. */
+.sam-carte-toile {
+    position: absolute;
+    inset: 0;
+}
+
+/* Écran d'accueil : couvre la carte, et disparaît une fois le lieu connu. */
+.sam-accueil {
+    position: absolute;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: #eef2f6;
+}
+
+.sam-accueil-boite {
+    width: 100%;
+    max-width: 24rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: .5rem;
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
 }
 
 @media (max-width: 767.98px) {
