@@ -17,6 +17,18 @@
 
     var config = window.SAM;
 
+    // Une erreur JavaScript non rattrapée laisserait la page muette : la carte
+    // s'affiche, mais plus aucun bouton ne répond, sans rien dire à personne.
+    // On l'affiche donc dans le panneau, où l'utilisateur la voit vraiment.
+    window.addEventListener('error', function (e) {
+        var zone = document.getElementById('message');
+        if (zone) {
+            zone.className = 'alert alert-danger py-2 px-3 mb-3';
+            zone.textContent = 'Erreur JavaScript : ' + e.message
+                + ' (' + (e.filename || '?').split('/').pop() + ':' + e.lineno + ')';
+        }
+    });
+
     // ------------------------------------------------------------------
     // État de l'application. Volontairement plat et lisible : quatre données
     // suffisent à décrire où l'on en est.
@@ -52,25 +64,42 @@
     // ------------------------------------------------------------------
     // Web Worker
     // ------------------------------------------------------------------
-    var worker = new Worker(config.cheminWorker);
+    // Créé dans un try/catch : si le worker ne démarre pas (fichier introuvable,
+    // page ouverte en file://, navigateur restrictif), on veut le SAVOIR et
+    // garder l'interface utilisable. Sans cette précaution, l'exception
+    // interromprait le script avant le branchement des boutons, plus bas : la
+    // carte s'afficherait et plus rien ne répondrait, sans le moindre message.
+    var worker = null;
+    try {
+        worker = new Worker(config.cheminWorker);
+    } catch (erreur) {
+        signalerWorkerIndisponible(erreur.message);
+    }
 
-    worker.onmessage = function (evenement) {
-        var m = evenement.data;
+    function signalerWorkerIndisponible(detail) {
+        informer('Le moteur de calcul n\'a pas pu démarrer (' + detail + '). '
+            + 'Le dessin de la zone reste possible, mais pas l\'optimisation.', true);
+    }
 
-        if (m.type === 'pret') {
-            informer('Obstacles indexés (' + m.nbObstacles + ' géométries, ' + m.dureeMs + ' ms). Cliquez maintenant un point de départ approximatif.');
-            activer('btnPoint', true);
-        } else if (m.type === 'resultat') {
-            afficherResultats(m.resultats, m.dureeMs);
-        } else if (m.type === 'erreur') {
-            informer('Erreur de calcul : ' + m.message, true);
-            activer('btnOptimiser', true);
-        }
-    };
+    if (worker) {
+        worker.onmessage = function (evenement) {
+            var m = evenement.data;
 
-    worker.onerror = function (e) {
-        informer('Le worker de calcul a échoué : ' + e.message, true);
-    };
+            if (m.type === 'pret') {
+                informer('Obstacles indexés (' + m.nbObstacles + ' géométries, ' + m.dureeMs + ' ms). Cliquez maintenant un point de départ approximatif.');
+                activer('btnPoint', true);
+            } else if (m.type === 'resultat') {
+                afficherResultats(m.resultats, m.dureeMs);
+            } else if (m.type === 'erreur') {
+                informer('Erreur de calcul : ' + m.message, true);
+                activer('btnOptimiser', true);
+            }
+        };
+
+        worker.onerror = function (e) {
+            signalerWorkerIndisponible(e.message);
+        };
+    }
 
     // ------------------------------------------------------------------
     // Étape 1 — délimiter la zone
@@ -94,8 +123,9 @@
         activer('btnPoint', false);
         activer('btnOptimiser', false);
         document.getElementById('resultats').innerHTML = '';
-        informer('Cliquez les sommets de la zone à étudier. Double-cliquez, ou utilisez « Terminer la zone », pour la refermer.');
+        informer('Cliquez les sommets de la zone à étudier. Double-cliquez, ou utilisez « Terminer », pour la refermer.');
         majBoutonsZone();
+        appliquerMode();
     }
 
     function ajouterSommet(latlng) {
@@ -143,6 +173,7 @@
         informer('Zone de ' + formaterNombre(surfaceKm2, 1) + ' km² délimitée. Chargez maintenant les obstacles.');
         activer('btnObstacles', true);
         majBoutonsZone();
+        appliquerMode();
     }
 
     /**
@@ -167,6 +198,11 @@
     function chargerObstacles() {
         etat.obstacles = genererObstaclesFictifs(etat.zone, config.graineDemo);
         dessinerObstacles();
+
+        if (!worker) {
+            signalerWorkerIndisponible('worker absent');
+            return;
+        }
 
         worker.postMessage({
             type: 'preparer',
@@ -226,12 +262,17 @@
         couches.depart = L.marker(etat.depart).addTo(carte).bindTooltip('Point de départ');
         informer('Point de départ posé. Lancez l\'optimisation.');
         activer('btnOptimiser', true);
+        appliquerMode();
     }
 
     // ------------------------------------------------------------------
     // Étape 5 — optimiser
     // ------------------------------------------------------------------
     function optimiser() {
+        if (!worker) {
+            signalerWorkerIndisponible('worker absent');
+            return;
+        }
         activer('btnOptimiser', false);
         couches.resultats.clearLayers();
         informer('Calcul en cours...');
@@ -359,6 +400,18 @@
         activer('btnTerminerZone', etat.mode === 'zone' && etat.zone.length >= 3);
     }
 
+    /**
+     * Rend le mode courant visible : curseur en croix sur la carte et bouton
+     * enfoncé. Sans ce retour, « mode dessin actif » et « rien ne s'est passé »
+     * se ressemblent trait pour trait, puisque la carte continue de se déplacer
+     * exactement comme avant.
+     */
+    function appliquerMode() {
+        carte.getContainer().classList.toggle('sam-mode-clic', etat.mode !== null);
+        document.getElementById('btnZone').classList.toggle('active', etat.mode === 'zone');
+        document.getElementById('btnPoint').classList.toggle('active', etat.mode === 'point');
+    }
+
     // ------------------------------------------------------------------
     // Branchements
     // ------------------------------------------------------------------
@@ -384,6 +437,7 @@
     document.getElementById('btnPoint').addEventListener('click', function () {
         etat.mode = 'point';
         informer('Cliquez sur la carte l\'endroit qui vous paraît intéressant.');
+        appliquerMode();
     });
 
     informer('Commencez par délimiter la zone à étudier.');

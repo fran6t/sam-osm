@@ -86,3 +86,13 @@
     border-top: 1px solid #dee2e6;
     padding-top: .75rem;
 }
+
+/* Mode « clic actif » (dessin de zone ou choix du point) : le curseur doit
+   dire sans ambiguïté que le prochain clic sera capté par l'application, et
+   non interprété comme un déplacement de la carte. Le sélecteur vise aussi
+   .leaflet-grab, sans quoi le curseur « main » de Leaflet reprend le dessus. */
+.sam-mode-clic,
+.sam-mode-clic .leaflet-grab,
+.sam-mode-clic .leaflet-interactive {
+    cursor: crosshair;
+}
