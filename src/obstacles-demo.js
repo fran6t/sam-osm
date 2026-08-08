@@ -37,6 +37,14 @@ function creerAleatoire(graine) {
 /**
  * Fabrique un jeu d'obstacles fictifs couvrant la zone.
  *
+ * La DENSITÉ compte autant que la forme : un jeu trop clairsemé donne des
+ * résultats qui paraissent arbitraires, parce que le moindre vide devient un
+ * maximum. On vise donc un ordre de grandeur réaliste pour de la campagne
+ * française — un réseau de voies tous les kilomètre environ, des hameaux
+ * groupés, des fermes isolées — et l'on fait croître les quantités avec la
+ * surface, pour que le rendu soit comparable quelle que soit la taille de la
+ * zone dessinée.
+ *
  * @param {Array} zone   polygone [[lat, lon], ...]
  * @param {number} graine
  * @returns {Array} obstacles au format interne
@@ -54,6 +62,15 @@ function genererObstaclesFictifs(zone, graine) {
 
     var hauteur = latMax - latMin;
     var largeur = lonMax - lonMin;
+
+    // Dimensions approximatives en kilomètres, pour raisonner en densité.
+    // Approximation volontairement grossière : elle ne sert qu'à choisir des
+    // quantités, pas à mesurer quoi que ce soit.
+    var latMoyenne = (latMin + latMax) / 2;
+    var hauteurKm = hauteur * 111.2;
+    var largeurKm = largeur * 111.2 * Math.cos(latMoyenne * Math.PI / 180);
+    var surfaceKm2 = Math.max(hauteurKm * largeurKm, 0.01);
+
     var obstacles = [];
     var compteur = 0;
 
@@ -62,23 +79,28 @@ function genererObstaclesFictifs(zone, graine) {
         return prefixe + '-' + compteur;
     }
 
-    // Un point au hasard dans la zone, exprimé en fractions (0..1) de la bbox.
     function pointAleatoire() {
         return [latMin + hasard() * hauteur, lonMin + hasard() * largeur];
     }
 
-    // --- Routes : des polylignes qui traversent la zone en zigzaguant. ---
-    // Elles partent d'un bord et rejoignent le bord opposé, avec quelques
-    // sommets intermédiaires : c'est la forme d'une vraie voie OSM.
-    var nbRoutes = 2 + Math.floor(hasard() * 2);
-    for (var r = 0; r < nbRoutes; r++) {
-        var horizontale = hasard() < 0.5;
+    /** Nombre d'éléments pour une densité donnée, avec un minimum de 1. */
+    function combien(parKm2) {
+        return Math.max(1, Math.round(surfaceKm2 * parKm2));
+    }
+
+    // --- Voies : un réseau lâche, environ une voie par kilomètre dans chaque
+    // direction. Chaque voie traverse la zone en zigzaguant légèrement, comme
+    // une route qui suit un relief.
+    function ajouterVoie(horizontale, position, categorie, libelle) {
         var sommets = [];
-        var nbSommets = 5 + Math.floor(hasard() * 4);
+        var nbSommets = 6 + Math.floor(hasard() * 5);
+        var derive = position;
 
         for (var s = 0; s < nbSommets; s++) {
-            var avance = s / (nbSommets - 1);          // 0 → 1 d'un bord à l'autre
-            var derive = 0.15 + hasard() * 0.7;        // position transversale
+            var avance = s / (nbSommets - 1);
+            derive += (hasard() - 0.5) * 0.08; // sinuosité
+            derive = Math.min(0.98, Math.max(0.02, derive));
+
             sommets.push(
                 horizontale
                     ? [latMin + derive * hauteur, lonMin + avance * largeur]
@@ -87,22 +109,37 @@ function genererObstaclesFictifs(zone, graine) {
         }
 
         obstacles.push({
-            id: identifiant('route'),
+            id: identifiant(categorie),
             type: 'ligne',
-            categorie: r === 0 ? 'route' : 'chemin',
-            libelle: r === 0 ? 'Route départementale (fictive)' : 'Chemin forestier (fictif)',
+            categorie: categorie,
+            libelle: libelle,
             source: 'demo',
             actif: true,
             coords: sommets,
         });
     }
 
-    // --- Bâtiments : de petits quadrilatères. ---
-    var nbBatiments = 6 + Math.floor(hasard() * 6);
-    for (var b = 0; b < nbBatiments; b++) {
-        var centre = pointAleatoire();
-        var dLat = (0.002 + hasard() * 0.004) * hauteur;
-        var dLon = (0.002 + hasard() * 0.004) * largeur;
+    var nbVoiesHorizontales = Math.max(1, Math.round(hauteurKm / 1.5));
+    var nbVoiesVerticales = Math.max(1, Math.round(largeurKm / 1.5));
+
+    for (var vh = 0; vh < nbVoiesHorizontales; vh++) {
+        var routePrincipale = vh === 0;
+        ajouterVoie(true, (vh + 0.5) / nbVoiesHorizontales,
+            routePrincipale ? 'route' : 'chemin',
+            routePrincipale ? 'Route départementale (fictive)' : 'Chemin rural (fictif)');
+    }
+    for (var vv = 0; vv < nbVoiesVerticales; vv++) {
+        ajouterVoie(false, (vv + 0.5) / nbVoiesVerticales,
+            vv % 2 === 0 ? 'chemin' : 'route',
+            vv % 2 === 0 ? 'Chemin forestier (fictif)' : 'Route communale (fictive)');
+    }
+
+    // --- Bâtiments : de petits quadrilatères, soit groupés en hameaux, soit
+    // isolés (fermes, granges). Le groupement compte : c'est lui qui crée les
+    // grandes poches vides entre les zones habitées.
+    function ajouterBatiment(centre, tailleM) {
+        var dLat = (tailleM / 2) / 111200;
+        var dLon = dLat / Math.max(0.2, Math.cos(latMoyenne * Math.PI / 180));
 
         obstacles.push({
             id: identifiant('batiment'),
@@ -120,8 +157,27 @@ function genererObstaclesFictifs(zone, graine) {
         });
     }
 
-    // --- Objets ponctuels : pylônes, antennes, abris... ---
-    var nbPoints = 4 + Math.floor(hasard() * 5);
+    var nbHameaux = combien(0.4);
+    for (var h = 0; h < nbHameaux; h++) {
+        var centreHameau = pointAleatoire();
+        var nbMaisons = 5 + Math.floor(hasard() * 12);
+
+        for (var m = 0; m < nbMaisons; m++) {
+            // Dispersion d'environ 150 m autour du centre du hameau.
+            ajouterBatiment([
+                centreHameau[0] + (hasard() - 0.5) * 300 / 111200,
+                centreHameau[1] + (hasard() - 0.5) * 300 / (111200 * Math.cos(latMoyenne * Math.PI / 180)),
+            ], 8 + hasard() * 14);
+        }
+    }
+
+    var nbFermes = combien(0.8);
+    for (var f = 0; f < nbFermes; f++) {
+        ajouterBatiment(pointAleatoire(), 12 + hasard() * 20);
+    }
+
+    // --- Objets ponctuels : pylônes, antennes, abris, silos...
+    var nbPoints = combien(1.5);
     for (var p = 0; p < nbPoints; p++) {
         obstacles.push({
             id: identifiant('point'),

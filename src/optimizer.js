@@ -46,6 +46,7 @@ var OPTIONS_PAR_DEFAUT = {
     nbAlternatives: 3,      // nombre de maxima locaux proposés (§6 du cahier)
     separationMin: 400,     // distance minimale entre deux alternatives, en mètres
     nbObstaclesDetailles: 3, // obstacles listés dans le résultat
+    maxIterationsMontee: 60, // garde-fou de la montée locale
     estDansZone: null,      // function(x, y) → bool, ou null si pas de contrainte
     bordConnaissance: null, // contour projeté au-delà duquel on ne sait rien
 };
@@ -133,6 +134,70 @@ function affiner(index, depart, options) {
 }
 
 /**
+ * Monte du point cliqué vers le maximum local d'isolement, de proche en proche.
+ *
+ * ------------------------------------------------------------------
+ * POURQUOI PARTIR DU POINT, ET NON BALAYER LES ALENTOURS
+ * ------------------------------------------------------------------
+ * L'utilisateur a une intuition : le relief, la végétation, l'accès, son sujet
+ * photographique. Quand il clique, il désigne une POCHE de terrain, pas une
+ * région de plusieurs kilomètres. Retenir le meilleur point d'un disque de
+ * 2 km revient à lui répondre « j'ai trouvé mieux, à vingt minutes de marche,
+ * de l'autre côté de la route » — ce n'est pas la question posée. C'est le
+ * mode « chercher dans toute la zone » du §5 du cahier, pas l'optimisation
+ * locale du §4.
+ *
+ * On progresse donc par petits pas : à chaque itération on n'examine qu'un
+ * voisinage de deux fois le pas, et on ne se déplace que si l'on gagne. Le
+ * point remonte la pente du score et s'arrête au sommet de SA colline. Il ne
+ * peut pas enjamber une route pour aller voir ailleurs.
+ *
+ * Les passes successives (grossière puis fines) servent ici à affiner la
+ * position, pas à explorer : le pas diminue, le voisinage examiné aussi.
+ */
+function monterVersMaximumLocal(index, depart, options) {
+    var meilleur = {
+        x: depart.x,
+        y: depart.y,
+        score: calculerScore(index, depart.x, depart.y, options.bordConnaissance),
+    };
+
+    for (var p = 0; p < options.passes.length; p++) {
+        var pas = options.passes[p];
+
+        for (var iteration = 0; iteration < options.maxIterationsMontee; iteration++) {
+            var candidats = balayer(index, meilleur.x, meilleur.y, 2 * pas, pas,
+                options.estDansZone, options.bordConnaissance);
+
+            var aProgresse = false;
+            for (var i = 0; i < candidats.length; i++) {
+                if (candidats[i].score > meilleur.score) {
+                    meilleur = candidats[i];
+                    aProgresse = true;
+                }
+            }
+
+            // Plus rien de mieux autour : on est au sommet pour cette échelle.
+            if (!aProgresse) {
+                break;
+            }
+        }
+    }
+
+    return meilleur;
+}
+
+/** Une position est-elle assez éloignée de toutes celles déjà retenues ? */
+function assezLoin(position, dejaRetenues, separationMin) {
+    for (var i = 0; i < dejaRetenues.length; i++) {
+        if (distancePointPoint(position.x, position.y, dejaRetenues[i].x, dejaRetenues[i].y) < separationMin) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Choisit jusqu'à nbAlternatives graines parmi les candidats, en imposant une
  * distance minimale entre elles.
  *
@@ -141,101 +206,113 @@ function affiner(index, depart, options) {
  * fois le même endroit sous trois noms différents. On veut des poches de vide
  * DISTINCTES.
  */
-function choisirGraines(candidats, nbVoulu, separationMin) {
+function choisirGraines(candidats, nbVoulu, separationMin, dejaRetenues) {
     var tries = candidats.slice().sort(function (a, b) { return b.score - a.score; });
-    var graines = [];
+    var graines = (dejaRetenues || []).slice();
+    var nbDepart = graines.length;
 
-    for (var i = 0; i < tries.length && graines.length < nbVoulu; i++) {
-        var tropProche = false;
-        for (var g = 0; g < graines.length; g++) {
-            if (distancePointPoint(tries[i].x, tries[i].y, graines[g].x, graines[g].y) < separationMin) {
-                tropProche = true;
-                break;
-            }
-        }
-        if (!tropProche) {
+    for (var i = 0; i < tries.length && graines.length - nbDepart < nbVoulu; i++) {
+        if (assezLoin(tries[i], graines, separationMin)) {
             graines.push(tries[i]);
         }
     }
 
-    return graines;
+    return graines.slice(nbDepart);
+}
+
+/** Habille une position calculée : score, éléments limitants, provenance. */
+function decrire(index, position, options, origine) {
+    var limitants = index.plusProches(position.x, position.y, options.nbObstaclesDetailles)
+        .map(function (p) {
+            return {
+                libelle: p.obstacle.libelle,
+                categorie: p.obstacle.categorie,
+                distance: p.distance,
+            };
+        });
+
+    // Le bord de la zone est présenté comme un élément limitant à part entière :
+    // quand c'est lui qui borne le score, l'utilisateur doit le savoir. Cela
+    // signifie « élargissez la zone », pas « c'est isolé ».
+    if (options.bordConnaissance) {
+        limitants.push({
+            libelle: 'Bord de la zone étudiée (au-delà, aucune donnée)',
+            categorie: 'limite',
+            distance: distancePointContour(position.x, position.y, options.bordConnaissance),
+        });
+        limitants.sort(function (a, b) { return a.distance - b.distance; });
+        limitants.length = Math.min(limitants.length, options.nbObstaclesDetailles);
+    }
+
+    return {
+        x: position.x,
+        y: position.y,
+        score: position.score,
+        origine: origine, // 'local' = obtenu depuis le point cliqué ; 'alternative' = trouvé ailleurs
+        obstacles: limitants,
+    };
 }
 
 /**
  * Point d'entrée de l'optimisation.
  *
+ * Le PREMIER résultat est toujours le maximum local atteint depuis le point
+ * cliqué : c'est la réponse à la question posée, et elle reste en tête même si
+ * une alternative obtient un meilleur score. Les suivants sont d'autres poches
+ * intéressantes repérées dans le voisinage élargi, proposées à titre de
+ * comparaison — l'utilisateur reste décisionnaire (§6 du cahier).
+ *
  * @param {IndexSpatial} index
  * @param {{x:number, y:number}} depart  point approximatif cliqué, projeté
  * @param {object} optionsAppelant       surcharge de OPTIONS_PAR_DEFAUT
- * @returns {Array} résultats triés par score décroissant :
- *          [{ x, y, score, obstacles: [{ libelle, categorie, distance }] }]
+ * @returns {Array} [{ x, y, score, origine, obstacles }]
  */
 function optimiserIsolement(index, depart, optionsAppelant) {
     var options = Object.assign({}, OPTIONS_PAR_DEFAUT, optionsAppelant || {});
 
-    // Passe grossière : où sont les régions prometteuses ?
-    var candidats = balayer(
-        index,
-        depart.x,
-        depart.y,
-        options.rayonInitial,
-        options.passes[0],
-        options.estDansZone,
-        options.bordConnaissance
-    );
+    // Cliquer hors de la zone n'a pas de sens : on ne sait rien de ce qui s'y
+    // trouve. Mieux vaut une liste vide qu'une réponse inventée.
+    if (options.estDansZone && !options.estDansZone(depart.x, depart.y)) {
+        return [];
+    }
 
-    // Le point cliqué lui-même est toujours un candidat valable : il peut être
-    // meilleur que tout ce que la grille a échantillonné autour de lui.
-    if (!options.estDansZone || options.estDansZone(depart.x, depart.y)) {
-        candidats.push({
-            x: depart.x,
-            y: depart.y,
-            score: calculerScore(index, depart.x, depart.y, options.bordConnaissance),
+    var resultats = [
+        decrire(index, monterVersMaximumLocal(index, depart, options), options, 'local'),
+    ];
+
+    // Alternatives : on balaye largement autour du départ, on retient des
+    // graines bien séparées du résultat local et entre elles, puis on les affine.
+    if (options.nbAlternatives > 1) {
+        var candidats = balayer(
+            index,
+            depart.x,
+            depart.y,
+            options.rayonInitial,
+            options.passes[0],
+            options.estDansZone,
+            options.bordConnaissance
+        );
+
+        var graines = choisirGraines(
+            candidats,
+            options.nbAlternatives - 1,
+            options.separationMin,
+            resultats
+        );
+
+        var alternatives = [];
+        graines.forEach(function (graine) {
+            var affine = affiner(index, graine, options);
+            // L'affinage peut ramener une graine tout près d'un résultat déjà
+            // retenu : on ne propose pas deux fois le même endroit.
+            if (assezLoin(affine, resultats.concat(alternatives), options.separationMin)) {
+                alternatives.push(decrire(index, affine, options, 'alternative'));
+            }
         });
+
+        alternatives.sort(function (a, b) { return b.score - a.score; });
+        resultats = resultats.concat(alternatives);
     }
-
-    if (candidats.length === 0) {
-        return []; // rien d'explorable : le clic était hors de la zone étudiée
-    }
-
-    var graines = choisirGraines(candidats, options.nbAlternatives, options.separationMin);
-
-    var resultats = graines.map(function (graine) {
-        var affine = affiner(index, graine, options);
-
-        var limitants = index.plusProches(affine.x, affine.y, options.nbObstaclesDetailles)
-            .map(function (p) {
-                return {
-                    libelle: p.obstacle.libelle,
-                    categorie: p.obstacle.categorie,
-                    distance: p.distance,
-                };
-            });
-
-        // Le bord de la zone est présenté comme un élément limitant à part
-        // entière : quand c'est lui qui borne le score, l'utilisateur doit le
-        // savoir. Cela signifie « élargissez la zone », pas « c'est isolé ».
-        if (options.bordConnaissance) {
-            limitants.push({
-                libelle: 'Bord de la zone étudiée (au-delà, aucune donnée)',
-                categorie: 'limite',
-                distance: distancePointContour(affine.x, affine.y, options.bordConnaissance),
-            });
-            limitants.sort(function (a, b) { return a.distance - b.distance; });
-            limitants.length = Math.min(limitants.length, options.nbObstaclesDetailles);
-        }
-
-        return {
-            x: affine.x,
-            y: affine.y,
-            score: affine.score,
-            obstacles: limitants,
-        };
-    });
-
-    // L'affinage peut réordonner les résultats : une graine moins bien classée
-    // au départ peut mener à un meilleur maximum.
-    resultats.sort(function (a, b) { return b.score - a.score; });
 
     return resultats;
 }

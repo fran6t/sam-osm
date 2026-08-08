@@ -89,6 +89,7 @@ self.onmessage = function (evenement) {
                     return {
                         latlon: projection.versLatLon(r.x, r.y),
                         score: r.score,
+                        origine: r.origine,
                         obstacles: r.obstacles,
                     };
                 }),

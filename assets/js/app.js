@@ -387,16 +387,18 @@
         couches.resultats.clearLayers();
 
         resultats.forEach(function (r, rang) {
-            var meilleur = rang === 0;
-            var couleur = meilleur ? '#198754' : '#6c757d';
+            // Le premier résultat est celui issu du point cliqué : il est mis en
+            // avant même si une alternative affiche un meilleur score.
+            var estLocal = r.origine === 'local';
+            var couleur = estLocal ? '#198754' : '#6c757d';
 
             // Le cercle matérialise le score : à l'intérieur, aucun obstacle connu.
             couches.resultats.addLayer(
                 L.circle(r.latlon, {
                     radius: r.score,
                     color: couleur,
-                    weight: meilleur ? 2 : 1,
-                    fillOpacity: meilleur ? 0.12 : 0.05,
+                    weight: estLocal ? 2 : 1,
+                    fillOpacity: estLocal ? 0.12 : 0.05,
                 })
             );
 
@@ -408,7 +410,8 @@
                         iconSize: [26, 26],
                         iconAnchor: [13, 13],
                     }),
-                }).bindTooltip(ETIQUETTES[rang] + ' — ' + formaterDistance(r.score))
+                }).bindTooltip(ETIQUETTES[rang] + ' — ' + formaterDistance(r.score)
+                    + (estLocal ? ' (depuis votre point)' : ''))
             );
         });
 
@@ -416,6 +419,8 @@
 
         document.getElementById('resultats').innerHTML =
             '<h2 class="h6 mt-3">Résultats <small class="text-muted fw-normal">(' + dureeMs + ' ms)</small></h2>'
+            + '<p class="small text-muted mb-2">A est le maximum d\'isolement atteint depuis votre point. '
+            + 'Les autres sont d\'autres poches de la zone, proposées à titre de comparaison.</p>'
             + resultats.map(function (r, rang) { return carteResultat(r, rang); }).join('');
 
         informer('Calcul terminé en ' + dureeMs + ' ms.');
@@ -433,13 +438,17 @@
                 + echapper(o.libelle) + ' — ' + formaterDistance(o.distance) + '</li>';
         }).join('');
 
+        var estLocal = r.origine === 'local';
+
         return ''
-            + '<div class="card mb-2' + (rang === 0 ? ' border-success' : '') + '">'
+            + '<div class="card mb-2' + (estLocal ? ' border-success' : '') + '">'
             + '  <div class="card-body py-2 px-3">'
             + '    <div class="d-flex justify-content-between align-items-baseline">'
             + '      <span class="fw-bold">' + ETIQUETTES[rang] + '</span>'
             + '      <span class="fs-5">' + formaterDistance(r.score) + '</span>'
             + '    </div>'
+            + '    <div class="small ' + (estLocal ? 'text-success' : 'text-muted') + '">'
+            + (estLocal ? 'Depuis votre point' : 'Ailleurs dans la zone') + '</div>'
             + '    <div class="small text-muted">' + r.latlon[0].toFixed(5) + ', ' + r.latlon[1].toFixed(5) + '</div>'
             + '    <div class="small mt-1">Éléments limitants :</div>'
             + '    <ul class="small mb-0 ps-3">' + obstacles + '</ul>'

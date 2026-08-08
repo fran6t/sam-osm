@@ -167,19 +167,19 @@ console.log('\n— Optimiseur —');
         resultats[0].score > index.distanceMinimale(700, 600));
     verifierVrai('les obstacles limitants sont listés', resultats[0].obstacles.length > 0);
 
-    // La contrainte de zone doit être respectée : bridé à l'ouest, le meilleur
-    // point ne peut plus être le centre.
-    const bride = optimiserIsolement(index, { x: 700, y: 600 }, {
+    // La contrainte de zone doit être respectée : bridé à l'ouest, le point ne
+    // peut plus remonter jusqu'au centre du carré.
+    const bride = optimiserIsolement(index, { x: 300, y: 600 }, {
         passes: [100, 20, 5], rayonInitial: 1500, nbAlternatives: 1,
         estDansZone: (x) => x <= 500,
     });
     verifierVrai('aucun résultat ne sort de la zone autorisée', bride[0].x <= 500);
 
-    // Départ hors zone et zone vide : on ne doit pas planter, juste ne rien rendre.
+    // Départ hors zone : on ne doit pas planter, ni inventer un point ailleurs.
     const vide = optimiserIsolement(index, { x: 700, y: 600 }, {
         passes: [100, 20], rayonInitial: 200, estDansZone: () => false,
     });
-    verifierVrai('départ hors zone : liste vide plutôt qu\'une erreur', vide.length === 0);
+    verifierVrai('départ hors zone : liste vide plutôt qu\'une réponse inventée', vide.length === 0);
 }
 
 console.log('\n— Plafond lié à la limite de connaissance —');
@@ -219,6 +219,42 @@ console.log('\n— Plafond lié à la limite de connaissance —');
     verifier('distance au contour depuis l\'extérieur', distancePointContour(1000, 2300, zone), 300);
 }
 
+console.log('\n— Le résultat principal reste celui du point cliqué —');
+{
+    // Deux clairières : une petite là où l'utilisateur clique, une bien plus
+    // grande à 4 km. Le premier résultat doit rester dans SA clairière : il a
+    // désigné un endroit, pas demandé le meilleur point du département.
+    const murs = [];
+    for (let angle = 0; angle < 360; angle += 6) {
+        const r = angle * Math.PI / 180;
+        // Petite clairière autour de (0, 0), rayon 300 m.
+        murs.push({ id: 'p' + angle, categorie: 'test', libelle: 'haie', type: 'point',
+            pts: [[300 * Math.cos(r), 300 * Math.sin(r)]],
+            bbox: [300 * Math.cos(r), 300 * Math.sin(r), 300 * Math.cos(r), 300 * Math.sin(r)] });
+        // Grande clairière autour de (4000, 0), rayon 1200 m.
+        const gx = 4000 + 1200 * Math.cos(r);
+        const gy = 1200 * Math.sin(r);
+        murs.push({ id: 'g' + angle, categorie: 'test', libelle: 'haie', type: 'point',
+            pts: [[gx, gy]], bbox: [gx, gy, gx, gy] });
+    }
+
+    const index = new IndexSpatial(murs, 250);
+    const resultats = optimiserIsolement(index, { x: 80, y: 60 }, {
+        passes: [100, 20], rayonInitial: 5000, nbAlternatives: 2, separationMin: 800,
+    });
+
+    verifierVrai('le premier résultat est marqué comme local', resultats[0].origine === 'local');
+    verifier('...et se trouve dans la clairière cliquée (x)', resultats[0].x, 0, 60);
+    verifier('...et non dans la grande clairière voisine (y)', resultats[0].y, 0, 60);
+    verifierVrai('...à courte distance du point cliqué',
+        distancePointPoint(resultats[0].x, resultats[0].y, 80, 60) < 300);
+
+    verifierVrai('la grande clairière est proposée en alternative',
+        resultats.length > 1 && resultats[1].origine === 'alternative');
+    verifierVrai('...avec un meilleur score, sans pour autant passer devant',
+        resultats[1].score > resultats[0].score);
+}
+
 console.log('\n— Alternatives (§6 du cahier) —');
 {
     // Deux clairières séparées : l'optimiseur doit proposer deux endroits
@@ -239,7 +275,11 @@ console.log('\n— Alternatives (§6 du cahier) —');
     verifierVrai('deux alternatives sont proposées', resultats.length === 2);
     verifierVrai('...suffisamment éloignées l\'une de l\'autre',
         distancePointPoint(resultats[0].x, resultats[0].y, resultats[1].x, resultats[1].y) >= 1000);
-    verifierVrai('...classées du plus isolé au moins isolé', resultats[0].score >= resultats[1].score);
+    // Le tri par score ne s'applique qu'aux alternatives : le résultat issu du
+    // point cliqué garde la première place, même si une alternative fait mieux.
+    verifierVrai('la première est celle du point cliqué', resultats[0].origine === 'local');
+    verifierVrai('les suivantes sont des alternatives',
+        resultats.slice(1).every((r) => r.origine === 'alternative'));
 }
 
 console.log(echecs === 0 ? '\nTout est vert.\n' : `\n${echecs} vérification(s) en échec.\n`);
