@@ -23,6 +23,7 @@ for (const fichier of ['geometry.js', 'spatial-index.js', 'optimizer.js']) {
 const {
     creerProjection, distancePointPoint, distancePointSegment, distancePointPolyligne,
     pointDansPolygone, distancePointPolygone, distancePointContour, distanceAObstacle, projeterObstacle,
+    pointLePlusProcheSurObstacle, pointLePlusProcheSurSuite,
     IndexSpatial, optimiserIsolement,
 } = contexte;
 
@@ -94,6 +95,60 @@ console.log('\n— Format interne et projection d\'obstacles —');
     );
     verifierVrai('un obstacle projeté porte son rectangle englobant', obstacle.bbox.length === 4);
     verifier('le moteur mesure jusqu\'à la géométrie, pas au centre', distanceAObstacle(0, 0, obstacle), 0);
+}
+
+console.log('\n— Points de contact (traits de mesure) —');
+{
+    // Un trait de mesure ne vaut que s'il aboutit exactement là où la distance
+    // a été mesurée. On vérifie donc que le point de contact est bien SUR la
+    // géométrie, et à la distance annoncée.
+    const route = {
+        type: 'ligne', pts: [[0, 0], [100, 0], [100, 100]],
+    };
+    const contactRoute = pointLePlusProcheSurObstacle(50, 30, route);
+    verifier('contact sur une route : au pied de la perpendiculaire (x)', contactRoute[0], 50);
+    verifier('...sur le segment lui-même (y)', contactRoute[1], 0);
+    verifier('...à la distance annoncée',
+        distancePointPoint(50, 30, contactRoute[0], contactRoute[1]), distanceAObstacle(50, 30, route));
+
+    const batiment = {
+        type: 'polygone', pts: [[0, 0], [40, 0], [40, 25], [0, 25]],
+    };
+    const contactMur = pointLePlusProcheSurObstacle(60, 12, batiment);
+    verifier('contact sur un bâtiment : sur le MUR, pas au centre (x)', contactMur[0], 40);
+    verifier('...à la bonne hauteur (y)', contactMur[1], 12);
+    verifier('...à la distance annoncée',
+        distancePointPoint(60, 12, contactMur[0], contactMur[1]), distanceAObstacle(60, 12, batiment));
+    verifierVrai('...et ce n\'est pas le centre du bâtiment', contactMur[0] !== 20 || contactMur[1] !== 12.5);
+
+    const dedans = pointLePlusProcheSurObstacle(20, 12, batiment);
+    verifierVrai('depuis l\'intérieur d\'un bâtiment, le contact est le point lui-même',
+        dedans[0] === 20 && dedans[1] === 12);
+
+    const pylone = { type: 'point', pts: [[7, 9]] };
+    verifierVrai('contact sur un objet ponctuel : l\'objet lui-même',
+        pointLePlusProcheSurObstacle(0, 0, pylone).join() === '7,9');
+
+    // Cohérence de bout en bout : chaque élément limitant d'un résultat doit
+    // porter un contact situé à sa distance annoncée.
+    const obstacles = [
+        { id: 'r', categorie: 'test', libelle: 'route', type: 'ligne',
+          pts: [[-500, -500], [1500, -500]], bbox: [-500, -500, 1500, -500] },
+        { id: 'b', categorie: 'test', libelle: 'bâtiment', type: 'polygone',
+          pts: [[900, 900], [960, 900], [960, 940], [900, 940]], bbox: [900, 900, 960, 940] },
+    ];
+    const index = new IndexSpatial(obstacles, 250);
+    const zone = [[0, 0], [1200, 0], [1200, 1200], [0, 1200]];
+    const resultats = optimiserIsolement(index, { x: 400, y: 400 }, {
+        passes: [100, 20], rayonInitial: 800, nbAlternatives: 1,
+        estDansZone: (x, y) => pointDansPolygone(x, y, zone), bordConnaissance: zone,
+    });
+
+    const ecarts = resultats[0].obstacles.filter((o) =>
+        Math.abs(distancePointPoint(resultats[0].x, resultats[0].y, o.contact[0], o.contact[1]) - o.distance) > 1e-6);
+    verifier('chaque élément limitant porte un contact à la bonne distance', ecarts.length, 0);
+    verifier('le trait le plus court vaut exactement le rayon du cercle',
+        resultats[0].obstacles[0].distance, resultats[0].score, 1e-6);
 }
 
 console.log('\n— Index spatial : mêmes réponses que l\'approche naïve —');

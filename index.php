@@ -100,6 +100,13 @@ $configJs = [
             </li>
         </ol>
 
+        <div class="form-check form-switch small mt-2">
+            <input class="form-check-input" type="checkbox" id="chkMesures" checked>
+            <label class="form-check-label" for="chkMesures">
+                Afficher les traits de mesure
+            </label>
+        </div>
+
         <div id="resultats"></div>
 
         <details class="mt-3 small">
@@ -109,7 +116,9 @@ $configJs = [
                 <li><span class="sam-puce" style="background:#fd7e14"></span> chemin</li>
                 <li><span class="sam-puce" style="background:#6f42c1"></span> bâtiment</li>
                 <li><span class="sam-puce" style="background:#20c997"></span> infrastructure ponctuelle</li>
-                <li><span class="sam-puce" style="background:#198754"></span> meilleur résultat &amp; cercle d'isolement</li>
+                <li><span class="sam-puce" style="background:#198754"></span> résultat depuis votre point &amp; cercle d'isolement</li>
+                <li><span class="sam-puce" style="background:#6c757d"></span> alternatives ailleurs dans la zone</li>
+                <li><span class="sam-puce" style="background:#198754"></span> traits de mesure vers les éléments limitants</li>
             </ul>
         </details>
 

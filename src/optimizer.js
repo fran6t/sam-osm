@@ -228,6 +228,9 @@ function decrire(index, position, options, origine) {
                 libelle: p.obstacle.libelle,
                 categorie: p.obstacle.categorie,
                 distance: p.distance,
+                // Point de contact sur la géométrie : permet de tracer la
+                // mesure et donc de la vérifier à l'œil.
+                contact: pointLePlusProcheSurObstacle(position.x, position.y, p.obstacle),
             };
         });
 
@@ -239,6 +242,7 @@ function decrire(index, position, options, origine) {
             libelle: 'Bord de la zone étudiée (au-delà, aucune donnée)',
             categorie: 'limite',
             distance: distancePointContour(position.x, position.y, options.bordConnaissance),
+            contact: pointLePlusProcheSurSuite(position.x, position.y, options.bordConnaissance, true),
         });
         limitants.sort(function (a, b) { return a.distance - b.distance; });
         limitants.length = Math.min(limitants.length, options.nbObstaclesDetailles);

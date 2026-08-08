@@ -38,6 +38,7 @@
         zone: [],          // sommets de la zone, en [lat, lon]
         obstacles: [],     // format interne (§7 du cahier)
         depart: null,      // point approximatif choisi, en [lat, lon]
+        resultats: [],     // derniers résultats reçus du worker
     };
 
     // featureGroup et non layerGroup : seul le premier sait calculer le
@@ -48,6 +49,7 @@
         obstacles: L.featureGroup(),
         depart: null,
         resultats: L.featureGroup(),
+        mesures: L.featureGroup(),
     };
 
     var poignees = [];
@@ -71,6 +73,7 @@
 
         couches.obstacles.addTo(carte);
         couches.resultats.addTo(carte);
+        couches.mesures.addTo(carte);
 
         carte.on('click', function (e) {
             if (etat.mode === 'point') {
@@ -254,6 +257,8 @@
 
         couches.obstacles.clearLayers();
         couches.resultats.clearLayers();
+        couches.mesures.clearLayers();
+        etat.resultats = [];
         viderCouche('depart');
         document.getElementById('resultats').innerHTML = '';
 
@@ -362,6 +367,7 @@
         }
         activer('btnOptimiser', false);
         couches.resultats.clearLayers();
+        couches.mesures.clearLayers();
         informer('Calcul en cours...');
 
         worker.postMessage({
@@ -385,6 +391,7 @@
         }
 
         couches.resultats.clearLayers();
+        etat.resultats = resultats;
 
         resultats.forEach(function (r, rang) {
             // Le premier résultat est celui issu du point cliqué : il est mis en
@@ -415,6 +422,7 @@
             );
         });
 
+        dessinerMesures();
         carte.fitBounds(couches.resultats.getBounds(), { padding: [30, 30] });
 
         document.getElementById('resultats').innerHTML =
@@ -424,6 +432,49 @@
             + resultats.map(function (r, rang) { return carteResultat(r, rang); }).join('');
 
         informer('Calcul terminé en ' + dureeMs + ' ms.');
+    }
+
+    /**
+     * Trace un trait de chaque résultat vers chacun de ses éléments limitants.
+     *
+     * Outil de vérification avant tout : le trait le plus court doit valoir
+     * exactement le rayon du cercle, et surtout aboutir SUR la géométrie — au
+     * bord d'un bâtiment, sur un segment de route — et non sur son centre.
+     * C'est la façon la plus directe de contrôler à l'œil que la mesure est
+     * celle qu'annonce le §17 du cahier.
+     */
+    function dessinerMesures() {
+        couches.mesures.clearLayers();
+
+        if (!document.getElementById('chkMesures').checked) {
+            return;
+        }
+
+        etat.resultats.forEach(function (r) {
+            r.obstacles.forEach(function (o, rang) {
+                var limitant = rang === 0; // celui qui fixe le score
+
+                couches.mesures.addLayer(
+                    L.polyline([r.latlon, o.contact], {
+                        color: '#198754',
+                        weight: limitant ? 3 : 1,
+                        opacity: limitant ? 0.95 : 0.55,
+                        dashArray: limitant ? null : '4,4',
+                    }).bindTooltip(o.libelle + ' — ' + formaterDistance(o.distance))
+                );
+
+                // Petite marque au point de contact : elle montre précisément
+                // où la mesure aboutit sur l'obstacle.
+                couches.mesures.addLayer(
+                    L.circleMarker(o.contact, {
+                        radius: limitant ? 4 : 3,
+                        color: '#198754',
+                        weight: 1,
+                        fillOpacity: limitant ? 1 : 0.6,
+                    })
+                );
+            });
+        });
     }
 
     function carteResultat(r, rang) {
@@ -527,6 +578,10 @@
     // Branchements
     // ------------------------------------------------------------------
     document.getElementById('btnZone').addEventListener('click', placerRectangle);
+
+    // Basculer l'affichage ne relance aucun calcul : les points de contact sont
+    // déjà connus, on ne fait que les dessiner ou les effacer.
+    document.getElementById('chkMesures').addEventListener('change', dessinerMesures);
     document.getElementById('btnObstacles').addEventListener('click', chargerObstacles);
     document.getElementById('btnOptimiser').addEventListener('click', optimiser);
 

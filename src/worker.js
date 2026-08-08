@@ -90,7 +90,16 @@ self.onmessage = function (evenement) {
                         latlon: projection.versLatLon(r.x, r.y),
                         score: r.score,
                         origine: r.origine,
-                        obstacles: r.obstacles,
+                        // Les points de contact repassent en coordonnées
+                        // géographiques : la page ignore tout de la projection.
+                        obstacles: r.obstacles.map(function (o) {
+                            return {
+                                libelle: o.libelle,
+                                categorie: o.categorie,
+                                distance: o.distance,
+                                contact: projection.versLatLon(o.contact[0], o.contact[1]),
+                            };
+                        }),
                     };
                 }),
             });

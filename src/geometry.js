@@ -201,6 +201,71 @@ function distanceAObstacle(px, py, obstacle) {
     }
 }
 
+/**
+ * Point du segment [AB] le plus proche de P.
+ *
+ * Même calcul que distancePointSegment(), mais on retourne le point de contact
+ * au lieu de la distance. Sert à TRACER la mesure sur la carte : un trait qui
+ * aboutit sur le bord d'un bâtiment, et non sur son centre, rend visible le
+ * fait que l'on mesure bien jusqu'à la géométrie réelle.
+ */
+function pointLePlusProcheSurSegment(px, py, ax, ay, bx, by) {
+    var abx = bx - ax;
+    var aby = by - ay;
+    var longueurCarree = abx * abx + aby * aby;
+
+    if (longueurCarree === 0) {
+        return [ax, ay];
+    }
+
+    var t = ((px - ax) * abx + (py - ay) * aby) / longueurCarree;
+    t = Math.max(0, Math.min(1, t));
+
+    return [ax + t * abx, ay + t * aby];
+}
+
+/** Point d'une suite de segments le plus proche de P (polyligne ou contour fermé). */
+function pointLePlusProcheSurSuite(px, py, points, ferme) {
+    var meilleur = null;
+    var meilleureDistance = Infinity;
+    var debut = ferme ? 0 : 1;
+
+    for (var i = debut; i < points.length; i++) {
+        var precedent = points[(i - 1 + points.length) % points.length];
+        var candidat = pointLePlusProcheSurSegment(px, py, precedent[0], precedent[1], points[i][0], points[i][1]);
+        var d = distancePointPoint(px, py, candidat[0], candidat[1]);
+
+        if (d < meilleureDistance) {
+            meilleureDistance = d;
+            meilleur = candidat;
+        }
+    }
+
+    return meilleur;
+}
+
+/**
+ * Point de l'obstacle le plus proche de P, quel que soit son type.
+ * Pour un point à l'intérieur d'un polygone, le contact est le point lui-même :
+ * la distance vaut alors zéro, on est DANS l'obstacle.
+ */
+function pointLePlusProcheSurObstacle(px, py, obstacle) {
+    switch (obstacle.type) {
+        case 'point':
+            return [obstacle.pts[0][0], obstacle.pts[0][1]];
+        case 'ligne':
+            return obstacle.pts.length === 1
+                ? [obstacle.pts[0][0], obstacle.pts[0][1]]
+                : pointLePlusProcheSurSuite(px, py, obstacle.pts, false);
+        case 'polygone':
+            return pointDansPolygone(px, py, obstacle.pts)
+                ? [px, py]
+                : pointLePlusProcheSurSuite(px, py, obstacle.pts, true);
+        default:
+            return [px, py];
+    }
+}
+
 /** Rectangle englobant [minX, minY, maxX, maxY] d'une liste de points projetés. */
 function boiteEnglobante(points) {
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
